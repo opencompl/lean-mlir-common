@@ -2,8 +2,9 @@
 namespace MLIR.Untyped
 
 /- The datastructure is generic over the types of: `Op`erations, `T`erminators and `Var`iables -/
-variable (Op T Var : Type)
+variable (Op T : Type)
 
+--TODO: fix this doc now that `Var` is gone
 /-- `VarName` is the type of (human-readable) variable names.
 Variables names are primarily used at when binding new variables, whereas the `Var` generic type
 is used
@@ -21,7 +22,7 @@ instance : DecidableEq BlockLabel := by unfold BlockLabel; infer_instance
 mutual
 
 inductive Expr
-  | mk (varName : VarName) (op : Op) (args : List Var) (regions : List Region)
+  | mk (varName : VarName) (op : Op) (args : List VarName) (regions : List Region)
 
 inductive Program
   | mk (args : List VarName) (lets : List Expr) (terminator : T)
