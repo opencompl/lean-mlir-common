@@ -35,24 +35,20 @@ def Expr.substitute (σ : Substitution) : Expr Op T → Expr Op T
     | r::rs => r.substitute σ' :: subRegions σ' rs
 
 def Program.substitute (σ : Substitution) : Program Op T → Program Op T
-  | ⟨args, lets, terminator⟩ =>
-      let σ' := args.foldl Substitution.removeMappingFor σ
-      ⟨args, subLets σ' lets, substituteTerminator σ'.apply terminator⟩
-  where subLets (σ' : Substitution) : List (Expr Op T) → List (Expr Op T)
+  | ⟨lets, terminator⟩ => ⟨subLets lets, substituteTerminator σ.apply terminator⟩
+  where subLets : List (Expr Op T) → List (Expr Op T)
     | [] => []
-    | l::ls => l.substitute σ' :: subLets σ' ls
+    | l::ls => l.substitute σ :: subLets ls
 
 def BasicBlock.substitute (σ : Substitution) : BasicBlock Op T → BasicBlock Op T
-  | ⟨label, program⟩ => ⟨label, program.substitute σ⟩
+  | ⟨label, args, program⟩ =>
+      let σ' := args.foldl Substitution.removeMappingFor σ
+      ⟨label, args, program.substitute σ'⟩
 
 def Region.substitute (σ : Substitution) : Region Op T → Region Op T
-  | ⟨entry, blocks⟩ => ⟨subEntry entry, subBlocks blocks⟩
-  where
-    subEntry : Option (Program Op T) → Option (Program Op T)
-      | none => none
-      | some entry => some (entry.substitute σ)
-    subBlocks : List (BasicBlock Op T) → List (BasicBlock Op T)
-      | []    => []
-      | b::bs => b.substitute σ :: subBlocks bs
+  | ⟨entry, blocks⟩ => ⟨entry, subBlocks blocks⟩
+  where subBlocks : List (BasicBlock Op T) → List (BasicBlock Op T)
+    | []    => []
+    | b::bs => b.substitute σ :: subBlocks bs
 
 end

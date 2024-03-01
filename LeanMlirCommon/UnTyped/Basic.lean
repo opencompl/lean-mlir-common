@@ -1,8 +1,5 @@
 
-namespace MLIR.UnTyped
-
-/- The datastructure is generic over the types of: `Op`erations, `T`erminators and `Var`iables -/
-variable (Op T : Type)
+namespace MLIR
 
 --TODO: fix this doc now that `Var` is gone
 /-- `VarName` is the type of (human-readable) variable names.
@@ -19,18 +16,30 @@ def BlockLabel : Type := String
 instance : DecidableEq VarName := by unfold VarName; infer_instance
 instance : DecidableEq BlockLabel := by unfold BlockLabel; infer_instance
 
+
+namespace UnTyped
+
+/- The datastructure is generic over the types of: `Op`erations, `T`erminators and `Var`iables -/
+variable (Op T : Type)
+
 mutual
 
+/-- An `Expr` binds the result of a single operation to a new variable. Morally, it represents
+`$varName = $op($args) { $regions }` -/
 inductive Expr
   | mk (varName : VarName) (op : Op) (args : List VarName) (regions : List Region)
 
+/-- A program is simply a sequence of operations, followed by a terminator -/
 inductive Program
-  | mk (args : List VarName) (lets : List Expr) (terminator : T)
+  | mk (lets : List Expr) (terminator : T)
 
+/-- A basic block has a label, a set of arguments, and then a program -/
 inductive BasicBlock
-  | mk (label : BlockLabel) (program : Program)
+  | mk (label : BlockLabel) (args : List VarName) (program : Program)
 
+/-- A regions consists of one or more basic blocks, where the first basic block is known as the
+entry block -/
 inductive Region
-  | mk (entry : Option Program) (blocks : List BasicBlock)
+  | mk (entry : BasicBlock) (blocks : List BasicBlock)
 
 end
