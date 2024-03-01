@@ -29,9 +29,13 @@ mutual
 inductive Expr
   | mk (varName : VarName) (op : Op) (args : List VarName) (regions : List Region)
 
-/-- A program is simply a sequence of operations, followed by a terminator -/
+/-- `Lets` is a sequence of operations (without terminator) -/
+inductive Lets
+  | mk (lets : List Expr)
+
+/-- `Program` is a sequence of operations, followed by a terminator -/
 inductive Program
-  | mk (lets : List Expr) (terminator : T)
+  | mk (lets : Lets) (terminator : T)
 
 /-- A basic block has a label, a set of arguments, and then a program -/
 inductive BasicBlock
@@ -43,3 +47,12 @@ inductive Region
   | mk (entry : BasicBlock) (blocks : List BasicBlock)
 
 end
+
+
+/-! ## Projections -/
+namespace Expr
+
+def varName : Expr Op T → VarName
+  | ⟨varName, _, _, _⟩ => varName
+
+end Expr
