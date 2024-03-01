@@ -1,6 +1,6 @@
-import LeanMlirCommon.Basic
+import LeanMlirCommon.UnTyped.Basic
 
-namespace MLIR.Untyped
+namespace MLIR.UnTyped
 
 def Substitution : Type := List (VarName × VarName)
 

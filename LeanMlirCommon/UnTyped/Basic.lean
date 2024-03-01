@@ -1,5 +1,5 @@
 
-namespace MLIR.Untyped
+namespace MLIR.UnTyped
 
 /- The datastructure is generic over the types of: `Op`erations, `T`erminators and `Var`iables -/
 variable (Op T : Type)
@@ -34,11 +34,3 @@ inductive Region
   | mk (entry : Option Program) (blocks : List BasicBlock)
 
 end
-
-
-
-
-
-
-
-end MLIR.Untyped
