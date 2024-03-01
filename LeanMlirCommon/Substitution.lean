@@ -2,44 +2,57 @@ import LeanMlirCommon.Basic
 
 namespace MLIR.Untyped
 
-class Substitution (S : Type u) (Var : outParam (Type v)) (Var' : outParam (Type w)) where
-  substitute : S → Var → Var'
-  /-- `removeMappingFor v σ` is called whenever a variable with name `v` is bound, and should return
-  a substitution which does not change occurences of the now-bound variable `v` -/
-  removeMappingFor : VarName → S → S
+def Substitution : Type := List (VarName × VarName)
 
+/-- Remove all substitutions of variable `v` (i.e., where `v` is the variable being replaced) from
+the substitution `σ` -/
+def Substitution.removeMappingFor (σ : Substitution) (v : VarName) : Substitution :=
+  List.filter (·.fst != v) σ
 
+/-- Apply a substution `σ` to a variable `v`, returning the `v` unchanged if the `σ` does not define
+a mapping for `v` -/
+def Substitution.apply (σ : Substitution) (v : VarName) : VarName :=
+  match σ.lookup v with
+    | some w => w
+    | none => v
 
-
--- def Substitution : Type := List (VarName × VarName)
-
--- /-- Remove all substitutions of variable `v` (i.e., where `v` is the variable being replaced) from
--- the substitution `σ` -/
--- def Substitution.removeMappingFor (σ : Substitution) (v : VarName) : Substitution :=
---   List.filter (·.fst != v) σ
-
--- /-- Apply a substution `σ` to a variable `v`, returning the `v` unchanged if the `σ` does not define
--- a mapping for `v` -/
--- def Substitution.apply (σ : Substitution) (v : VarName) : VarName :=
---   match σ.lookup v with
---     | some w => w
---     | none => v
-
+class SubstituteableTerminator (T : Type u) where
+  substituteTerminator (σ : VarName → VarName) : T → T
 
 mutual
 
-open Substitution
-variable {Op T Var Var' S} (σ : S) [Substitution S Var Var']
+open SubstituteableTerminator (substituteTerminator)
+variable {Op T} [SubstituteableTerminator T]
 
-def Expr.substitute : Expr Op T Var → Expr Op T Var'
+def Expr.substitute (σ : Substitution) : Expr Op T → Expr Op T
   | ⟨varName, op, args, regions⟩ =>
-      let σ := removeMappingFor varName σ
-      ⟨varName, op, args.map (substitute σ), regions.map (Region.substitute σ)⟩
+      let σ' := σ.removeMappingFor varName
+      ⟨varName, op, σ'.apply <$> args, subRegions σ' regions⟩
+  -- HACK: `subRegions` is a specialization of `List.map`, but it's needed for the terminator
+  -- checker to be happy.
+  where subRegions (σ' : Substitution) : List (Region Op T) → List (Region Op T)
+    | []    => []
+    | r::rs => r.substitute σ' :: subRegions σ' rs
 
-def Program.substitute : Program Op T Var → Program Op T Var' := sorry
+def Program.substitute (σ : Substitution) : Program Op T → Program Op T
+  | ⟨args, lets, terminator⟩ =>
+      let σ' := args.foldl Substitution.removeMappingFor σ
+      ⟨args, subLets σ' lets, substituteTerminator σ'.apply terminator⟩
+  where subLets (σ' : Substitution) : List (Expr Op T) → List (Expr Op T)
+    | [] => []
+    | l::ls => l.substitute σ' :: subLets σ' ls
 
-def BasicBlock.substitute : BasicBlock Op T Var → BasicBlock Op T Var' := sorry
+def BasicBlock.substitute (σ : Substitution) : BasicBlock Op T → BasicBlock Op T
+  | ⟨label, program⟩ => ⟨label, program.substitute σ⟩
 
-def Region.substitute : Region Op T Var → Region Op T Var' := sorry
+def Region.substitute (σ : Substitution) : Region Op T → Region Op T
+  | ⟨entry, blocks⟩ => ⟨subEntry entry, subBlocks blocks⟩
+  where
+    subEntry : Option (Program Op T) → Option (Program Op T)
+      | none => none
+      | some entry => some (entry.substitute σ)
+    subBlocks : List (BasicBlock Op T) → List (BasicBlock Op T)
+      | []    => []
+      | b::bs => b.substitute σ :: subBlocks bs
 
 end
