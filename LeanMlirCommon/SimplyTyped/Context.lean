@@ -22,10 +22,6 @@ variables -/
 def push (Γ : Context Ty) (v : VarName) (ty : Ty) : Context Ty :=
   (v, ty) :: Γ
 
-/-- Two contexts are extensionally equal if they map each variable to the same type -/
-def ExtEq (Γ Δ : Context Ty) : Prop :=
-  ∀ v, Γ.lookup v = Δ.lookup v
-
 @[simp] theorem hasType_push {Γ : Context Ty} :
     (Γ.push v ty).hasType v ty := by
   simp [push, hasType]
@@ -33,3 +29,27 @@ def ExtEq (Γ Δ : Context Ty) : Prop :=
 @[simp] theorem hasType_push_of_neq {Γ : Context Ty} (h : w ≠ v) :
     (Γ.push v ty).hasType w ty' ↔ Γ.hasType w ty' := by
   simp [push, hasType, List.lookup, (beq_eq_false_iff_ne _ _).mpr h]
+
+/-! ## `ExtEq`-/
+
+/-- Two contexts are extensionally equal if they map each variable to the same type -/
+def ExtEq (Γ Δ : Context Ty) : Prop :=
+  ∀ v, Γ.lookup v = Δ.lookup v
+
+@[simp] theorem ExtEq.rfl {Γ : Context Ty} : Γ.ExtEq Γ := by
+  intro; rfl
+
+theorem ExtEq.trans {Γ Δ Ξ : Context Ty} : Γ.ExtEq Δ → Δ.ExtEq Ξ → Γ.ExtEq Ξ := by
+  unfold ExtEq
+  intro h₁ h₂ v
+  rw [h₁ v, h₂ v]
+instance : Trans (@ExtEq Op) ExtEq ExtEq := ⟨ExtEq.trans⟩
+
+theorem ExtEq.symm {Γ Δ : Context Ty} : Γ.ExtEq Δ → Δ.ExtEq Γ := by
+  unfold ExtEq
+  intro h v
+  rw [h v]
+
+theorem hasType_of_extEq {Γ Δ : Context Ty} (h_eq : Γ.ExtEq Δ) (h : Δ.hasType v t) :
+    Γ.hasType v t := by
+  sorry
