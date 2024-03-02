@@ -43,10 +43,17 @@ class OpSignature (Op : Type) (Ty : outParam Type) where
   signature : Op → Signature Ty
 open OpSignature (signature)
 
+variable {Op Ty} [OpSignature Op Ty]
+
 /-- For each expression `e` in `lets`, add `e.varName, (signature e).returnType` to the context -/
-def Lets.outContext {Op Ty} [OpSignature Op Ty]
-    (lets : UnTyped.Lets Op VarName) (Γ_in : Context Ty) : Context Ty :=
+def Lets.outContext (lets : UnTyped.Lets Op VarName) (Γ_in : Context Ty) : Context Ty :=
   lets.inner.foldl (fun Γ e => Γ.push e.varName (signature e.op).returnType) Γ_in
+
+@[simp] theorem Lets.outContext_cons (lets : List (UnTyped.Expr Op VarName)) (Γ_in : Context Ty) :
+    Lets.outContext ⟨e :: lets⟩ Γ_in
+    = (Lets.outContext ⟨lets⟩ (Γ_in.push e.varName (signature e.op).returnType)) := by
+  simp [outContext]
+
 
 /-!
 # WellTyped
@@ -66,7 +73,7 @@ def Expr.WellTyped (Γ : Context Ty) : UnTyped.Expr Op VarName → Ty → Prop
 
 /-- -/
 def Lets.WellTyped (Γ_in : Context Ty) : UnTyped.Lets Op VarName → Context Ty → Prop
-  | ⟨[]⟩, Γ_out       => ∀ v t, Γ_out.hasType v t ↔ Γ_in.hasType v t
+  | ⟨[]⟩, Γ_out       => Γ_out.ExtEq Γ_in
   | ⟨e :: es⟩, Γ_out  =>
       let eTy := (signature e.op).returnType
       Expr.WellTyped Γ_in e eTy ∧ Lets.WellTyped (Γ_in.push e.varName eTy) ⟨es⟩ Γ_out
@@ -102,7 +109,9 @@ def RegionList.WellTyped : List (UnTyped.Region Op VarName) → List (RegionType
 
 end
 
-variable {Op Ty} [OpSignature Op Ty]
+/-!
+## Theorems
+-/
 
 theorem Expr.WellTyped.exists_iff {e : UnTyped.Expr Op VarName} {Γ : Context Ty} :
     (∃ ty, Expr.WellTyped Γ e ty) ↔ Expr.WellTyped Γ e (signature e.op).returnType := by
@@ -142,3 +151,31 @@ theorem Lets.WellTyped.exists_iff {lets : UnTyped.Lets Op VarName} {Γ_in : Cont
       simp only [RegionList.WellTyped, ih, List.length_cons, Nat.succ.injEq, List.zip_cons_cons,
         List.mem_cons, forall_eq_or_imp]
       constructor <;> (intro ⟨h₁, h₂, h₃⟩; simpa [h₁, h₂] using h₃)
+
+/-!
+### Congr
+Show that well-typedness is preserved by extensionally equivalent contexts
+-/
+
+theorem Expr.WellTyped_of_extEq {Γ Δ : Context Ty} (e : UnTyped.Expr Op VarName)
+    (h_eq : Γ.ExtEq Δ) : Expr.WellTyped Γ e t → Expr.WellTyped Δ e t := by
+  intro h
+  rcases e
+  unfold WellTyped at h ⊢
+  simp at h ⊢
+  rcases h with ⟨h₁, h₂, h₃, rfl⟩
+  refine ⟨h₁, ?_, h₃, rfl⟩
+  intro ⟨v, ty⟩
+  sorry -- TODO: finish this proof
+
+theorem Lets.WellTyped_of_extEq {Γ_in Γ_out Δ_in Δ_out : Context Ty} {lets : UnTyped.Lets Op _}
+    (h_eq_in : Γ_in.ExtEq Δ_in) (h_eq_out : Γ_out.ExtEq Δ_out) :
+    Lets.WellTyped Γ_in lets Γ_out → Lets.WellTyped Δ_in lets Δ_out := by
+  intro h
+  rcases lets with ⟨lets⟩
+  induction lets
+  case nil =>
+    exact Context.ExtEq.trans h_eq_out.symm (Context.ExtEq.trans h h_eq_in)
+  case cons e lets ih =>
+    simp [WellTyped] at h ⊢
+    sorry -- TODO: finish
