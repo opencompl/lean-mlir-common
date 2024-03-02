@@ -1,6 +1,7 @@
 import LeanMlirCommon.UnTyped.Basic
 import LeanMlirCommon.SimplyTyped.Context
 import Std.Data.List
+import Mathlib.Tactic.Use
 
 /-!
 ## Simple Intrinsically WellTyped MLIR programs
@@ -20,8 +21,8 @@ we should return.
 
 namespace MLIR.SimplyTyped
 
-/-- The type of a regions specifies: the number and types of arguments to its entry block, and
-the regions return type -/
+/-- The type of a region specifies the number and types of arguments to its entry block and
+the region return type -/
 structure RegionType (Ty : Type) where
   arguments : List Ty
   returnType : Ty
@@ -40,8 +41,12 @@ structure Signature (Ty : Type) where
 operation `op : Op` -/
 class OpSignature (Op : Type) (Ty : outParam Type) where
   signature : Op → Signature Ty
+open OpSignature (signature)
 
-
+/-- For each expression `e` in `lets`, add `e.varName, (signature e).returnType` to the context -/
+def Lets.outContext {Op Ty} [OpSignature Op Ty]
+    (lets : UnTyped.Lets Op VarName) (Γ_in : Context Ty) : Context Ty :=
+  lets.inner.foldl (fun Γ e => Γ.push e.varName (signature e.op).returnType) Γ_in
 
 /-!
 # WellTyped
@@ -49,37 +54,33 @@ We define what it means for an untyped program to be well-formed under a specifi
 -/
 mutual
 
-open OpSignature (signature)
-
 variable {Op Ty : Type} [OpSignature Op Ty]
 
 def Expr.WellTyped (Γ : Context Ty) : UnTyped.Expr Op VarName → Ty → Prop
-  | ⟨varName, op, args, regions⟩, ty =>
+  | ⟨_, op, args, regions⟩, ty =>
     let ⟨argTys, rgnTys, retTy⟩ := signature op
     args.length = argTys.length
-      ∧ ∀ x ∈ args.zip argTys, Γ.hasType x.fst x.snd
-    ∧ regWT regions rgnTys
+      ∧ (∀ x ∈ args.zip argTys, Γ.hasType x.fst x.snd)
+    ∧ RegionList.WellTyped regions rgnTys
     ∧ ty = retTy
-    -- HACK: `regWT` is morally:
-    -- `regions.length = rgnTys.length ∧ ∀ r ∈ regions.zip rgnTys, Region.WellTyped r.fst r.snd`
-    -- we inline the definition to make the termination checker happy.
-    where regWT : List (UnTyped.Region Op VarName) → List (RegionType Ty) → Prop
-      | [], [] => True
-      | r :: rgns, rTy :: rgnTys => Region.WellTyped r rTy ∧ regWT rgns rgnTys
-      | _, _ => False
 
 /-- -/
 def Lets.WellTyped (Γ_in : Context Ty) : UnTyped.Lets Op VarName → Context Ty → Prop
   | ⟨[]⟩, Γ_out       => ∀ v t, Γ_out.hasType v t ↔ Γ_in.hasType v t
-  | ⟨e :: es⟩, Γ_out  => ∃ eTy, Expr.WellTyped Γ_in e eTy
-                                ∧ Lets.WellTyped (Γ_in.push e.varName eTy) ⟨es⟩ Γ_out
+  | ⟨e :: es⟩, Γ_out  =>
+      let eTy := (signature e.op).returnType
+      Expr.WellTyped Γ_in e eTy ∧ Lets.WellTyped (Γ_in.push e.varName eTy) ⟨es⟩ Γ_out
 
-def Program.WellTyped (Γ : Context Ty) : UnTyped.Program Op VarName → Ty → Prop
-  | ⟨lets, v⟩, ty => ∃ Γ_out, Lets.WellTyped Γ lets Γ_out ∧ Γ_out.hasType v ty
+def Body.WellTyped (Γ : Context Ty) : UnTyped.Body Op VarName → Ty → Prop
+  | ⟨lets, v⟩, ty =>
+      let Γ_out := Lets.outContext lets Γ
+      -- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ see `Lets.WellTyped.exists_iff` for the justification
+      --                                  behind choosing this particular context
+      Lets.WellTyped Γ lets Γ_out ∧ Γ_out.hasType v ty
 
 def BasicBlock.WellTyped : UnTyped.BasicBlock Op VarName → RegionType Ty → Prop
   | ⟨_, args, prog⟩, ⟨argTys, retTy⟩ =>
-      args.length = argTys.length ∧ Program.WellTyped (args.zip argTys) prog retTy
+      args.length = argTys.length ∧ Body.WellTyped (args.zip argTys) prog retTy
 
 /-- Note that because we don't have branches between basic block, only the entry block to a region
 actually matters. Any other blocks, if specified, are unreachable and may be ignored.
@@ -88,21 +89,56 @@ context of the outer region -/
 def Region.WellTyped : UnTyped.Region Op VarName → RegionType Ty → Prop
   | ⟨entry, _⟩ => BasicBlock.WellTyped entry
 
+/-- `RegionList.WellTyped regions regionTypes` holds when `regions` and `regionTypes` are of the
+same length, and each `region` in the first list is welltyped according to the corresponing type
+of the second list.
+Morally, this can be expressed as
+`regions.length = rgnTys.length ∧ ∀ r ∈ regions.zip rgnTys, Region.WellTyped r.fst r.snd`
+However, we inline the definition to make the termination checker happy -/
+def RegionList.WellTyped : List (UnTyped.Region Op VarName) → List (RegionType Ty) → Prop
+  | [], [] => True
+  | r :: rgns, rTy :: rgnTys => Region.WellTyped r rTy ∧ RegionList.WellTyped rgns rgnTys
+  | _, _ => False
+
 end
 
-/-- Justify the `regWT` hack -/
-@[simp] theorem Expr.WellTyped.regWT_iff {Op Ty} [OpSignature Op Ty]
+variable {Op Ty} [OpSignature Op Ty]
+
+theorem Expr.WellTyped.exists_iff {e : UnTyped.Expr Op VarName} {Γ : Context Ty} :
+    (∃ ty, Expr.WellTyped Γ e ty) ↔ Expr.WellTyped Γ e (signature e.op).returnType := by
+  rcases e with ⟨⟩; simp [WellTyped]
+
+/-- There exists an output context for which a `Lets` is well-typed iff it is well-typed for
+`Lets.outContext lets _`. This justifies the choice of this particular context in `Body.WellTyped`
+-/
+theorem Lets.WellTyped.exists_iff {lets : UnTyped.Lets Op VarName} {Γ_in : Context Ty} :
+    (∃ Γ_out, Lets.WellTyped Γ_in lets Γ_out)
+    ↔ Lets.WellTyped Γ_in lets (Lets.outContext lets Γ_in) := by
+  constructor
+  case mpr => intro h; exact ⟨_, h⟩
+  case mp =>
+    intro ⟨Γ_out, h⟩
+    rcases lets with ⟨lets⟩
+    induction lets generalizing Γ_in
+    case nil => simp [WellTyped, outContext]
+    case cons e lets ih =>
+      rcases e with ⟨v, op, args, regions⟩
+      simp only [WellTyped, UnTyped.Expr.op_mk, UnTyped.Expr.varName_mk] at h
+      simpa [WellTyped, h, outContext] using ih h.right
+
+/-- Justify the `RegionList.WellTyped` definition -/
+@[simp] theorem RegionList.WellTyped.iff
     (regions : List (UnTyped.Region Op VarName)) (regionTypes : List (RegionType Ty)) :
-    regWT regions regionTypes
+    RegionList.WellTyped regions regionTypes
     ↔ regions.length = regionTypes.length
       ∧ ∀ r ∈ regions.zip regionTypes, Region.WellTyped r.fst r.snd := by
   induction regions generalizing regionTypes
   case nil =>
-    cases regionTypes <;> simp [regWT]
+    cases regionTypes <;> simp [RegionList.WellTyped]
   case cons r regions ih =>
     cases regionTypes
-    case nil => simp [regWT]
+    case nil => simp [RegionList.WellTyped]
     case cons rTy regionTypes =>
-      simp only [regWT, ih, List.length_cons, Nat.succ.injEq, List.zip_cons_cons, List.mem_cons,
-        forall_eq_or_imp]
+      simp only [RegionList.WellTyped, ih, List.length_cons, Nat.succ.injEq, List.zip_cons_cons,
+        List.mem_cons, forall_eq_or_imp]
       constructor <;> (intro ⟨h₁, h₂, h₃⟩; simpa [h₁, h₂] using h₃)
