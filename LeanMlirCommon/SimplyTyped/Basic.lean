@@ -129,16 +129,14 @@ def Body.mkReturn (v : Var Γ ty) : Body Op Γ ty := .mk .nil v
 
 /-- Add a new operation to the top of a `Body`, abstracting over a previously free variable -/
 def Body.lete (e : Expr Op Γ eTy) : Body Op (Γ.push e.varName eTy) ty → Body Op Γ ty
-  | ⟨⟨lets, ret⟩, h_lets⟩ =>
-      let Γ_out := Lets.outContext lets Γ
-      let lets : Lets Op _ Γ_out := ⟨lets, by
-        simp only [WellTyped] at h_lets
-        simp only [e.ty_eq] at *
-        -- exact Lets.WellTyped_of_extEq Context.ExtEq.rfl _ h_lets.left
-        sorry
+  | ⟨⟨lets, ret⟩, h_body⟩ =>
+      let lets : Lets Op _ _ := ⟨lets, by
+        simp only [WellTyped] at h_body
+        rcases h_body with ⟨h_lets, _⟩
+        exact h_lets
       ⟩
       let ret : Var _ _ := ⟨ret, by
-        simp only [WellTyped] at h_lets
-        exact Context.hasType_of_extEq lets.Γ_out_eq h_lets.right
+        simp only [WellTyped] at h_body
+        exact Context.hasType_of_extEq lets.Γ_out_eq h_body.right
       ⟩
       Body.mk (lets.lete e) ret
