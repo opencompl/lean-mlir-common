@@ -155,5 +155,19 @@ def Expr.recOn {motive : Expr Op Γ ty → Sort u}
       let args : VarList .. := ⟨args, by aesop⟩
       let regions : RegionList .. := ⟨regions, by aesop⟩
       cast (by rfl) <| mk varName op ty_eq args regions
-      --    ^^^^^^ this seems redundant, but Lean gives a type-error without the cast
+      --    ^^^^^^ the cast seems redundant, but Lean gives a type-error without it
+      --           Similarly, term-mode `rfl` doesn't work, the `by` is needed
+
+@[elab_as_elim, eliminator]
+def Lets.recOn {Γ_out} {motive : ∀ {Γ_in}, Lets Op Γ_in Γ_out → Sort u}
+    (nil : motive Lets.nil)
+    (lete : ∀ {Γ_in ty} (e : Expr Op Γ_in ty) (lets : Lets Op _ Γ_out), motive (Lets.lete e lets)) :
+    ∀ {Γ_in} (lets : Lets Op Γ_in Γ_out), motive lets
+  | Γ_in, ⟨⟨[]⟩, (h : Γ_out = Γ_in)⟩ => h ▸ nil
+  | Γ_in, ⟨⟨e :: lets⟩, h⟩ =>
+      have h := by unfold WellTyped at h; simpa only using h
+      let e : Expr _ _ (signature e.op).returnType := ⟨e, by exact h.left⟩
+      let lets := ⟨⟨lets⟩, by exact h.right⟩
+      cast (by rfl) <| lete e lets
+      --    ^^^^^^ the cast seems redundant, but Lean gives a type-error without it
       --           Similarly, term-mode `rfl` doesn't work, the `by` is needed
