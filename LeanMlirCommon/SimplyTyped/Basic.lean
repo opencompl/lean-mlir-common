@@ -68,7 +68,7 @@ def Lets.ofUnTyped (lets : UnTyped.Lets Op VarName) {Γ_in}
     Lets Op Γ_in (Lets.outContext lets Γ_in) :=
   ⟨lets, Lets.WellTyped.exists_iff.mp h⟩
 
-theorem Lets.Γ_out_eq (l : Lets Op Γ_in Γ_out) : Γ_out.ExtEq (Lets.outContext l.val Γ_in) := by
+theorem Lets.Γ_out_eq (l : Lets Op Γ_in Γ_out) : Γ_out = (Lets.outContext l.val Γ_in) := by
   rcases l with ⟨⟨l⟩, h⟩
   induction l generalizing Γ_in
   case nil => exact h
@@ -118,10 +118,10 @@ def Lets.lete (e : Expr Op Γ_in ty) (lets : Lets Op (Γ_in.push e.varName ty) �
 
 def Body.mk (lets : Lets Op Γ_in Γ_out) (ret : Var Γ_out ty) : Body Op Γ_in ty :=
   ⟨⟨lets.val, ret.val⟩, by
-    simp only [WellTyped]
-    constructor
-    · exact Lets.WellTyped_of_extEq Context.ExtEq.rfl lets.Γ_out_eq lets.prop
-    · exact Context.hasType_of_extEq lets.Γ_out_eq.symm ret.prop
+    simpa [WellTyped, lets.Γ_out_eq] using And.intro lets.prop ret.prop
+    -- constructor
+    -- · exact Lets.WellTyped_of_extEq Context.ExtEq.rfl lets.Γ_out_eq lets.prop
+    -- · exact Context.hasType_of_extEq lets.Γ_out_eq.symm ret.prop
   ⟩
 
 /-- Return an empty `Body`, whose terminator is "return `v`" -/
@@ -137,7 +137,7 @@ def Body.lete (e : Expr Op Γ eTy) : Body Op (Γ.push e.varName eTy) ty → Body
       ⟩
       let ret : Var _ _ := ⟨ret, by
         simp only [WellTyped] at h_body
-        exact Context.hasType_of_extEq lets.Γ_out_eq h_body.right
+        simpa [lets.Γ_out_eq] using h_body.right
       ⟩
       Body.mk (lets.lete e) ret
 
