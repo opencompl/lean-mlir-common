@@ -140,3 +140,20 @@ def Body.lete (e : Expr Op Γ eTy) : Body Op (Γ.push e.varName eTy) ty → Body
         exact Context.hasType_of_extEq lets.Γ_out_eq h_body.right
       ⟩
       Body.mk (lets.lete e) ret
+
+/-!
+## Eliminators / Induction Principles
+-/
+
+@[elab_as_elim, eliminator]
+def Expr.recOn {motive : Expr Op Γ ty → Sort u}
+    (mk : ∀ varName op ty_eq args regions, motive (Expr.mk varName op ty_eq args regions)) :
+    ∀ e, motive e
+  | ⟨⟨varName, op, args, regions⟩, h⟩ =>
+      have := by unfold WellTyped at h; simpa only [Prod.forall, RegionList.WellTyped.iff] using h
+      let ty_eq := by aesop
+      let args : VarList .. := ⟨args, by aesop⟩
+      let regions : RegionList .. := ⟨regions, by aesop⟩
+      cast (by rfl) <| mk varName op ty_eq args regions
+      --    ^^^^^^ this seems redundant, but Lean gives a type-error without the cast
+      --           Similarly, term-mode `rfl` doesn't work, the `by` is needed
