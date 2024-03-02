@@ -34,11 +34,14 @@ def Expr.substitute (σ : Substitution) : Expr Op T → Expr Op T
     | []    => []
     | r::rs => r.substitute σ' :: subRegions σ' rs
 
-def Program.substitute (σ : Substitution) : Program Op T → Program Op T
-  | ⟨lets, terminator⟩ => ⟨subLets lets, substituteTerminator σ.apply terminator⟩
-  where subLets : List (Expr Op T) → List (Expr Op T)
+def Lets.substitute (σ : Substitution) : Lets Op T → Lets Op T
+  | ⟨ls⟩    => ⟨go ls⟩
+  where go : List (Expr Op T) → List (Expr Op T)
     | [] => []
-    | l::ls => l.substitute σ :: subLets ls
+    | l::ls => l.substitute σ :: go ls
+
+def Body.substitute (σ : Substitution) : Body Op T → Body Op T
+  | ⟨lets, terminator⟩ => ⟨lets.substitute σ, substituteTerminator σ.apply terminator⟩
 
 def BasicBlock.substitute (σ : Substitution) : BasicBlock Op T → BasicBlock Op T
   | ⟨label, args, program⟩ =>
